@@ -8,6 +8,8 @@ import {
   Activity,
   Infinity,
   ChevronDown,
+  Menu,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -132,6 +134,7 @@ export default function App() {
   const [glReady, setGlReady] = useState(false);
   const [activeViz, setActiveViz] = useState<VisualizerName>("cantor");
   const [paramValues, setParamValues] = useState(buildDefaults);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Keep a ref so the visualizer-switch effect can read the latest params
   // without re-running every time a slider moves.
@@ -227,22 +230,46 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* ── Mobile backdrop ──────────────────────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-80 shrink-0 border-r border-border bg-card flex flex-col">
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-40 w-[280px] sm:w-80 shrink-0 border-r border-border bg-card flex flex-col
+          transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          md:static md:translate-x-0
+        `}
+      >
         {/* Brand */}
-        <div className="px-6 pt-6 pb-4 space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Infinity className="size-6" />
-            WizSeries
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Explore infinity, divergence &amp; chaos
-          </p>
+        <div className="px-4 sm:px-6 pt-5 sm:pt-6 pb-3 sm:pb-4 space-y-1 flex items-start justify-between">
+          <div className="space-y-1">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Infinity className="size-5 sm:size-6" />
+              WizSeries
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Explore infinity, divergence &amp; chaos
+            </p>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden p-1.5 -mr-1.5 rounded-md hover:bg-muted"
+            aria-label="Close sidebar"
+          >
+            <X className="size-5" />
+          </button>
         </div>
 
         <Separator />
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-5 sm:space-y-6">
           {/* Engine status badge */}
           <div>
             {state.status === "loading" && (
@@ -275,11 +302,12 @@ export default function App() {
               <select
                 id="viz-select"
                 value={activeViz}
-                onChange={(e) =>
-                  setActiveViz(e.target.value as VisualizerName)
-                }
+                onChange={(e) => {
+                  setActiveViz(e.target.value as VisualizerName);
+                  setSidebarOpen(false);
+                }}
                 disabled={state.status !== "ready"}
-                className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-8 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+                className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2.5 sm:py-2 pr-8 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
               >
                 {VIZ_KEYS.map((key) => (
                   <option key={key} value={key}>
@@ -339,7 +367,7 @@ export default function App() {
                       handleParam(p.name, parseFloat(e.target.value))
                     }
                     disabled={!glReady}
-                    className="w-full cursor-pointer accent-primary"
+                    className="w-full h-2 cursor-pointer accent-primary"
                   />
 
                   <div className="flex justify-between text-[10px] text-muted-foreground/60">
@@ -354,13 +382,22 @@ export default function App() {
 
         <Separator />
 
-        <div className="px-6 py-3 text-[11px] text-muted-foreground/50">
+        <div className="px-4 sm:px-6 py-3 text-[11px] text-muted-foreground/50">
           C++20 &middot; WebGL 2 &middot; React &middot; Emscripten
         </div>
       </aside>
 
       {/* ── Canvas ───────────────────────────────────────────────────── */}
-      <main className="flex-1 min-w-0">
+      <main className="flex-1 min-w-0 relative">
+        {/* Mobile menu button */}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="md:hidden absolute top-3 left-3 z-20 p-2 rounded-lg bg-card/80 backdrop-blur-sm border border-border shadow-sm hover:bg-card"
+          aria-label="Open sidebar"
+        >
+          <Menu className="size-5" />
+        </button>
+
         <canvas
           ref={canvasRef}
           id={CANVAS_ID}
