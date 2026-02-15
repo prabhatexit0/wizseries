@@ -1,9 +1,11 @@
-// ─── React + C++20 WASM Engine ──────────────────────────────────────────────
+// ─── WizSeries: WASM Engine ─────────────────────────────────────────────────
 // Compiled with Emscripten → ES6 module, consumed by Vite/React.
-// Exports:
-//   - computePrimes(limit)  : compute-intensive prime sieve (C++20 ranges)
-//   - initWebGL(canvasId)   : initialise a WebGL 2 context on a <canvas>
-//   - renderFrame(r, g, b)  : clear the canvas with the given colour
+//
+// Exports (embind):
+//   - computePrimes(limit)           — C++20 prime sieve (kept for reference)
+//   - initWebGL(canvasId)            — legacy single-context WebGL init
+//   - renderFrame(r, g, b)           — legacy colour clear
+//   - SeriesManager (class)          — full series visualiser engine
 // ────────────────────────────────────────────────────────────────────────────
 
 #include <algorithm>
@@ -20,15 +22,16 @@
 #include <emscripten/html5.h>
 #include <GLES3/gl3.h>
 
+// ─── Series engine headers ──────────────────────────────────────────────────
+#include "series/SeriesManager.h"
+
 // ─── Compute: Segmented Sieve of Eratosthenes (C++20) ──────────────────────
-// Returns all primes up to `limit` using modern C++20 features.
 
 namespace detail {
 
 auto sieve_primes(std::uint32_t limit) -> std::vector<std::uint32_t> {
     if (limit < 2) return {};
 
-    // Classic boolean sieve
     std::vector<bool> is_prime(limit + 1, true);
     is_prime[0] = is_prime[1] = false;
 
@@ -40,7 +43,6 @@ auto sieve_primes(std::uint32_t limit) -> std::vector<std::uint32_t> {
         }
     }
 
-    // C++20: use std::views to filter and collect primes
     auto indices = std::views::iota(std::uint32_t{0}, limit + 1);
     auto primes_view = indices | std::views::filter([&](std::uint32_t n) {
         return is_prime[n];
@@ -57,7 +59,6 @@ auto sieve_primes(std::uint32_t limit) -> std::vector<std::uint32_t> {
 
 } // namespace detail
 
-// Exposed to JS: returns a string summary (count + last few primes).
 auto computePrimes(std::uint32_t limit) -> std::string {
     auto primes = detail::sieve_primes(limit);
 
@@ -66,7 +67,6 @@ auto computePrimes(std::uint32_t limit) -> std::string {
     std::string result = "Found " + std::to_string(primes.size()) + " primes up to "
                          + std::to_string(limit) + ".\n";
 
-    // Show the last 10 primes as a preview
     auto tail = std::span{primes};
     if (tail.size() > 10) {
         tail = tail.last(10);
@@ -81,37 +81,32 @@ auto computePrimes(std::uint32_t limit) -> std::string {
     return result;
 }
 
-// ─── WebGL 2 Initialisation ────────────────────────────────────────────────
+// ─── Legacy WebGL 2 helpers (kept for backward compat) ──────────────────────
 
 static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE gl_context = 0;
 
 auto initWebGL(const std::string& canvas_id) -> bool {
-    // Build the selector: Emscripten expects "#canvasId"
     std::string selector = "#" + canvas_id;
 
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
-    attrs.majorVersion = 2;           // WebGL 2
+    attrs.majorVersion = 2;
     attrs.minorVersion = 0;
     attrs.alpha        = true;
     attrs.depth        = true;
     attrs.antialias    = true;
 
     gl_context = emscripten_webgl_create_context(selector.c_str(), &attrs);
-    if (gl_context <= 0) {
-        return false;
-    }
+    if (gl_context <= 0) return false;
 
     emscripten_webgl_make_context_current(gl_context);
 
-    // Initial clear to a dark blue-grey
     glClearColor(0.09f, 0.09f, 0.18f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     return true;
 }
 
-// Simple render pass: clear the canvas with the given RGB colour [0.0 – 1.0].
 void renderFrame(float r, float g, float b) {
     if (gl_context <= 0) return;
     emscripten_webgl_make_context_current(gl_context);
@@ -119,10 +114,20 @@ void renderFrame(float r, float g, float b) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-// ─── Embind exports ────────────────────────────────────────────────────────
+// ─── Embind exports ─────────────────────────────────────────────────────────
 
 EMSCRIPTEN_BINDINGS(engine) {
+    // Legacy free functions
     emscripten::function("computePrimes", &computePrimes);
     emscripten::function("initWebGL",     &initWebGL);
     emscripten::function("renderFrame",   &renderFrame);
+
+    // WizSeries engine
+    emscripten::class_<SeriesManager>("SeriesManager")
+        .constructor<>()
+        .function("initGL",               &SeriesManager::initGL)
+        .function("render",               &SeriesManager::render)
+        .function("setActiveVisualizer",   &SeriesManager::setActiveVisualizer)
+        .function("getActiveVisualizer",   &SeriesManager::getActiveVisualizer)
+        .function("setParam",             &SeriesManager::setParam);
 }

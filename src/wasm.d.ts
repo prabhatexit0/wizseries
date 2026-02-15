@@ -1,30 +1,42 @@
 /**
  * TypeScript declarations for the Emscripten-generated engine module.
  *
- * These types mirror the C++ functions exported via embind in cpp/main.cpp.
- * Update this file whenever you add or change exports on the C++ side.
+ * These types mirror the C++ functions / classes exported via embind
+ * in cpp/main.cpp.  Update this file whenever you change exports.
  */
+
+// ─── SeriesManager (embind class) ───────────────────────────────────────────
+
+export interface SeriesManager {
+  /** Create a WebGL 2 context on the given canvas. */
+  initGL(canvasId: string): boolean;
+
+  /** Render one frame of the active visualizer. */
+  render(time: number, width: number, height: number): void;
+
+  /** Switch the active visualizer by key name. */
+  setActiveVisualizer(name: string): void;
+
+  /** Get the key name of the currently active visualizer. */
+  getActiveVisualizer(): string;
+
+  /** Set a named parameter on the active visualizer. */
+  setParam(name: string, value: number): void;
+
+  /** Release the C++ instance (call when done). */
+  delete(): void;
+}
+
+// ─── Legacy free functions ──────────────────────────────────────────────────
 
 /** The instantiated WASM engine module. */
 export interface EngineModule {
-  /**
-   * Run a Sieve of Eratosthenes up to `limit` and return a summary string
-   * containing the count and the last few primes.
-   */
   computePrimes(limit: number): string;
-
-  /**
-   * Initialise a WebGL 2 rendering context on the given canvas element.
-   * @param canvasId  The DOM `id` attribute of the target `<canvas>` (without `#`).
-   * @returns `true` if the context was created successfully.
-   */
   initWebGL(canvasId: string): boolean;
-
-  /**
-   * Clear the canvas with the given RGB colour.
-   * Each channel is a float in [0, 1].
-   */
   renderFrame(r: number, g: number, b: number): void;
+
+  /** Embind class constructor for SeriesManager. */
+  SeriesManager: { new (): SeriesManager };
 }
 
 /**
