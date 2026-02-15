@@ -666,10 +666,11 @@ export default function App() {
   useEffect(() => {
     if (state.status !== "ready" || !engine || !canvasRef.current) return;
 
-    // Set the canvas buffer to match its CSS layout size
+    // Set the canvas buffer to match its CSS layout size, scaled for HiDPI
     const canvas = canvasRef.current;
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(canvas.clientWidth * dpr);
+    canvas.height = Math.round(canvas.clientHeight * dpr);
 
     const mgr = new engine.SeriesManager();
     managerRef.current = mgr;
@@ -706,14 +707,15 @@ export default function App() {
     const onResize = () => {
       const c = canvasRef.current;
       if (!c) return;
-      c.width = c.clientWidth;
-      c.height = c.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      c.width = Math.round(c.clientWidth * dpr);
+      c.height = Math.round(c.clientHeight * dpr);
 
-      // Also resize the overlay
+      // Also resize the overlay (device pixels)
       const o = overlayRef.current;
       if (o) {
-        o.width = c.clientWidth;
-        o.height = c.clientHeight;
+        o.width = Math.round(c.clientWidth * dpr);
+        o.height = Math.round(c.clientHeight * dpr);
       }
     };
     window.addEventListener("resize", onResize);
@@ -742,23 +744,33 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!overlay || !canvas) return;
 
-    // Ensure overlay matches canvas size
-    if (overlay.width !== canvas.clientWidth || overlay.height !== canvas.clientHeight) {
-      overlay.width = canvas.clientWidth;
-      overlay.height = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    const devW = Math.round(cssW * dpr);
+    const devH = Math.round(cssH * dpr);
+
+    // Resize overlay buffer to device pixels for crisp text
+    if (overlay.width !== devW || overlay.height !== devH) {
+      overlay.width = devW;
+      overlay.height = devH;
     }
 
     const ctx = overlay.getContext("2d");
     if (!ctx) return;
 
-    const w = overlay.width;
-    const h = overlay.height;
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, devW, devH);
+
+    // Scale context so annotation code works in CSS pixel coordinates
+    ctx.save();
+    ctx.scale(dpr, dpr);
 
     const renderer = ANNOTATION_RENDERERS[activeViz];
     if (renderer) {
-      renderer(ctx, w, h, paramValues[activeViz] ?? {});
+      renderer(ctx, cssW, cssH, paramValues[activeViz] ?? {});
     }
+
+    ctx.restore();
   }, [activeViz, paramValues]);
 
   // Redraw annotations when viz or params change
