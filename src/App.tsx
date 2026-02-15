@@ -57,7 +57,7 @@ const VISUALIZERS: Record<VisualizerName, VisualizerConfig> = {
   harmonic: {
     label: "Harmonic Series",
     description:
-      "The sum 1 + 1/2 + 1/3 + \u2026 diverges to infinity, yet each successive term shrinks toward zero. The cyan line tracks the ever-growing partial sum.",
+      "The sum 1 + 1/2 + 1/3 + \u2026 diverges to infinity, yet each successive term shrinks toward zero. The blue line tracks the ever-growing partial sum.",
     params: [
       {
         name: "terms",
@@ -122,11 +122,531 @@ function buildDefaults(): Record<string, Record<string, number>> {
   return out;
 }
 
+// ─── Coordinate helpers ─────────────────────────────────────────────────────
+// Convert clip-space (-1..1) to canvas pixel coordinates.
+
+function clipToPixelX(clipX: number, w: number): number {
+  return ((clipX + 1) / 2) * w;
+}
+function clipToPixelY(clipY: number, h: number): number {
+  return ((1 - clipY) / 2) * h;
+}
+
+// ─── Annotation renderers ───────────────────────────────────────────────────
+// Each draws text labels on a transparent 2D canvas overlay that sits on top
+// of the WebGL canvas.  The clip-space margins match the C++ visualizer code.
+
+const LABEL_COLOR = "#3d3a37";
+const LABEL_MUTED = "#7a7672";
+const FORMULA_COLOR = "#1a5276";
+const ACCENT_COLOR = "#8e44ad";
+const SUM_COLOR = "#1a3f7a";
+const LIMIT_COLOR = "#1a7a2e";
+
+function drawCantorAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const depth = Math.min(12, Math.max(1, Math.round(params.depth ?? 6)));
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.10, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+
+  const totalH = yMax - yMin;
+  const gap = totalH / (depth + 1);
+  const barH = gap * 0.70;
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+  ctx.textBaseline = "middle";
+
+  // Level labels on the left axis
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  for (let lv = 0; lv <= depth; lv++) {
+    const y = yMax - lv * gap - barH * 0.5;
+    const px = clipToPixelX(xMin - 0.025, w);
+    const py = clipToPixelY(y, h);
+    ctx.fillText(`${lv}`, px, py);
+  }
+
+  // Segments count on the right side
+  ctx.font = `${baseFontSize * 0.9}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_MUTED;
+  ctx.textAlign = "left";
+  for (let lv = 0; lv <= depth; lv++) {
+    const y = yMax - lv * gap - barH * 0.5;
+    const px = clipToPixelX(xMax + 0.02, w);
+    const py = clipToPixelY(y, h);
+    const segs = Math.pow(2, lv);
+    ctx.fillText(`${segs} seg${segs > 1 ? "s" : ""}`, px, py);
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  const ylX = clipToPixelX(-1 + 0.03, w);
+  const ylY = clipToPixelY(0, h);
+  ctx.translate(ylX, ylY);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Level", 0, 0);
+  ctx.restore();
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.fillText(
+    `Cantor Set  \u2014  depth = ${depth}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Bottom note: measure info
+  ctx.font = `italic ${baseFontSize * 0.9}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_MUTED;
+  ctx.fillText(
+    `Total length remaining: (2/3)${superscript(depth)} \u2248 ${Math.pow(2 / 3, depth).toFixed(4)}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMin - 0.055, h),
+  );
+}
+
+function drawHarmonicAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(500, Math.max(1, Math.round(params.terms ?? 30)));
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+
+  // Compute partial sum and yScale (matching C++)
+  let maxSum = 0;
+  for (let k = 1; k <= terms; k++) maxSum += 1 / k;
+  const yScale = Math.max(1, maxSum) * 1.1;
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  let step = 1;
+  if (yScale > 8) step = 2;
+  if (yScale > 16) step = 4;
+
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += step) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    const px = clipToPixelX(xMin - 0.025, w);
+    const py = clipToPixelY(clipY, h);
+    ctx.fillText(v.toFixed(0), px, py);
+  }
+
+  // X-axis: show term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  // Pick sensible x-tick spacing
+  let xStep = 1;
+  if (terms > 10) xStep = 5;
+  if (terms > 50) xStep = 10;
+  if (terms > 100) xStep = 25;
+  for (let k = 1; k <= terms; k += xStep) {
+    const cx = xMin + (k - 0.5) * barW;
+    const px = clipToPixelX(cx, w);
+    const py = clipToPixelY(yMin - 0.02, h);
+    ctx.fillText(`${k}`, px, py);
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ylX = clipToPixelX(-1 + 0.03, w);
+  const ylY = clipToPixelY((yMin + yMax) / 2, h);
+  ctx.translate(ylX, ylY);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    "Term (k)",
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMin - 0.07, h),
+  );
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `H\u2099 = \u2211 1/k,  k = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum value — top right corner
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${maxSum.toFixed(4)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Divergence note
+  ctx.font = `italic ${baseFontSize * 0.85}px system-ui, sans-serif`;
+  ctx.fillStyle = ACCENT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    "Diverges  \u2192  \u221E",
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.4,
+  );
+}
+
+function drawGeometricAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const ratio = params.ratio ?? 0.7;
+  const terms = Math.min(50, Math.max(1, Math.round(params.terms ?? 15)));
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMid = 0;
+  const yExt = 1 - Math.max(mTop, mBottom);
+
+  // Pre-scan for scaling (matching C++)
+  let maxAbsVal = 0, maxAbsSum = 0;
+  {
+    let v = 1, s = 0;
+    for (let k = 0; k < terms; k++) {
+      maxAbsVal = Math.max(maxAbsVal, Math.abs(v));
+      s += v;
+      maxAbsSum = Math.max(maxAbsSum, Math.abs(s));
+      v *= ratio;
+    }
+  }
+  const scale = Math.max(maxAbsVal, maxAbsSum, 0.001);
+
+  // Compute final partial sum
+  let partialSum = 0;
+  {
+    let v = 1;
+    for (let k = 0; k < terms; k++) {
+      partialSum += v;
+      v *= ratio;
+    }
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+  ctx.textBaseline = "middle";
+
+  // Y-axis tick labels (symmetric around 0)
+  let tickStep = scale / 4;
+  if (tickStep < 0.01) tickStep = 0.01;
+  const mag = Math.pow(10, Math.floor(Math.log10(tickStep)));
+  tickStep = Math.ceil(tickStep / mag) * mag;
+
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+
+  // Zero label
+  ctx.fillText(
+    "0",
+    clipToPixelX(xMin - 0.025, w),
+    clipToPixelY(yMid, h),
+  );
+
+  for (let v = tickStep; v < scale; v += tickStep) {
+    // Positive
+    const cyP = yMid + (v / scale) * yExt;
+    ctx.fillText(
+      formatTick(v),
+      clipToPixelX(xMin - 0.025, w),
+      clipToPixelY(cyP, h),
+    );
+    // Negative
+    const cyN = yMid - (v / scale) * yExt;
+    ctx.fillText(
+      formatTick(-v),
+      clipToPixelX(xMin - 0.025, w),
+      clipToPixelY(cyN, h),
+    );
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 10) xStep = 2;
+  if (terms > 20) xStep = 5;
+  for (let k = 0; k < terms; k += xStep) {
+    const cx = xMin + (k + 0.5) * barW;
+    const px = clipToPixelX(cx, w);
+    // Place below the zero line or below the bottom axis
+    const py = clipToPixelY(-1 + mBottom - 0.02, h);
+    ctx.fillStyle = LABEL_COLOR;
+    ctx.fillText(`${k}`, px, py);
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ylX = clipToPixelX(-1 + 0.025, w);
+  const ylY = clipToPixelY(0, h);
+  ctx.translate(ylX, ylY);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    "Term (k)",
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(-1 + mBottom - 0.07, h),
+  );
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 r\u1D4F,  r = ${ratio.toFixed(2)},  k = 0\u2026${terms - 1}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(1 - mTop + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(4)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h),
+  );
+
+  // Convergence limit
+  if (Math.abs(ratio) < 1 && Math.abs(1 - ratio) > 1e-6) {
+    const limit = 1 / (1 - ratio);
+    ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+    ctx.fillStyle = LIMIT_COLOR;
+    ctx.textAlign = "right";
+    ctx.fillText(
+      `Limit = 1/(1\u2212r) = ${limit.toFixed(4)}`,
+      clipToPixelX(xMax - 0.01, w),
+      clipToPixelY(1 - mTop + 0.04, h) + baseFontSize * 1.5,
+    );
+  } else {
+    ctx.font = `italic ${baseFontSize * 0.85}px system-ui, sans-serif`;
+    ctx.fillStyle = ACCENT_COLOR;
+    ctx.textAlign = "right";
+    ctx.fillText(
+      "|r| \u2265 1  \u2014  Diverges",
+      clipToPixelX(xMax - 0.01, w),
+      clipToPixelY(1 - mTop + 0.04, h) + baseFontSize * 1.5,
+    );
+  }
+}
+
+function drawLogisticAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const rMax = Math.min(4, Math.max(1, params.growth_rate ?? 4));
+  const rMin = 1.0;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // X-axis (r) tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (const rv of [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]) {
+    if (rv < rMin || rv > rMax + 0.01) continue;
+    const t = (rv - rMin) / (rMax - rMin);
+    const px = clipToPixelX(xMin + (xMax - xMin) * t, w);
+    const py = clipToPixelY(yMin - 0.025, h);
+    ctx.fillText(rv.toFixed(1), px, py);
+  }
+
+  // Chaos onset label
+  if (rMax > 3.57) {
+    const chaosT = (3.57 - rMin) / (rMax - rMin);
+    const cx = xMin + (xMax - xMin) * chaosT;
+    ctx.font = `italic ${baseFontSize * 0.85}px system-ui, sans-serif`;
+    ctx.fillStyle = "#a82020";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(
+      "r \u2248 3.57",
+      clipToPixelX(cx + 0.01, w),
+      clipToPixelY(yMax - 0.02, h),
+    );
+    ctx.fillText(
+      "(chaos)",
+      clipToPixelX(cx + 0.01, w),
+      clipToPixelY(yMax - 0.02, h) + baseFontSize * 1.1,
+    );
+  }
+
+  // Y-axis (x) tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (const v of [0, 0.25, 0.5, 0.75, 1.0]) {
+    const clipY = yMin + (yMax - yMin) * v;
+    ctx.fillText(
+      v.toFixed(2),
+      clipToPixelX(xMin - 0.02, w),
+      clipToPixelY(clipY, h),
+    );
+  }
+
+  // Axis labels
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    "Growth rate (r)",
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMin - 0.075, h),
+  );
+
+  ctx.save();
+  ctx.textBaseline = "middle";
+  const ylX = clipToPixelX(-1 + 0.025, w);
+  const ylY = clipToPixelY((yMin + yMax) / 2, h);
+  ctx.translate(ylX, ylY);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("x\u2099", 0, 0);
+  ctx.restore();
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    "x\u2099\u208A\u2081 = r \u00B7 x\u2099 \u00B7 (1 \u2212 x\u2099)",
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Current rMax info — top right
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `r \u2208 [1.00, ${rMax.toFixed(2)}]`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+}
+
+// ─── Text formatting helpers ────────────────────────────────────────────────
+
+function subscriptDigits(n: number): string {
+  const subs = "\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089";
+  return String(n)
+    .split("")
+    .map((d) => (/\d/.test(d) ? subs[parseInt(d)] : d))
+    .join("");
+}
+
+function superscript(n: number): string {
+  const sups: Record<string, string> = {
+    "0": "\u2070",
+    "1": "\u00B9",
+    "2": "\u00B2",
+    "3": "\u00B3",
+    "4": "\u2074",
+    "5": "\u2075",
+    "6": "\u2076",
+    "7": "\u2077",
+    "8": "\u2078",
+    "9": "\u2079",
+  };
+  return String(n)
+    .split("")
+    .map((d) => sups[d] ?? d)
+    .join("");
+}
+
+function formatTick(v: number): string {
+  if (Math.abs(v) >= 100) return v.toFixed(0);
+  if (Math.abs(v) >= 1) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+// ─── Annotation dispatch ────────────────────────────────────────────────────
+
+const ANNOTATION_RENDERERS: Record<
+  VisualizerName,
+  (
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    params: Record<string, number>,
+  ) => void
+> = {
+  cantor: drawCantorAnnotations,
+  harmonic: drawHarmonicAnnotations,
+  geometric: drawGeometricAnnotations,
+  logistic: drawLogisticAnnotations,
+};
+
 // ─── App ────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const { state, engine } = useWasmEngine();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const managerRef = useRef<SeriesManager | null>(null);
   const animRef = useRef<number>(0);
   const t0Ref = useRef<number>(0);
@@ -146,10 +666,11 @@ export default function App() {
   useEffect(() => {
     if (state.status !== "ready" || !engine || !canvasRef.current) return;
 
-    // Set the canvas buffer to match its CSS layout size
+    // Set the canvas buffer to match its CSS layout size, scaled for HiDPI
     const canvas = canvasRef.current;
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(canvas.clientWidth * dpr);
+    canvas.height = Math.round(canvas.clientHeight * dpr);
 
     const mgr = new engine.SeriesManager();
     managerRef.current = mgr;
@@ -186,8 +707,16 @@ export default function App() {
     const onResize = () => {
       const c = canvasRef.current;
       if (!c) return;
-      c.width = c.clientWidth;
-      c.height = c.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      c.width = Math.round(c.clientWidth * dpr);
+      c.height = Math.round(c.clientHeight * dpr);
+
+      // Also resize the overlay (device pixels)
+      const o = overlayRef.current;
+      if (o) {
+        o.width = Math.round(c.clientWidth * dpr);
+        o.height = Math.round(c.clientHeight * dpr);
+      }
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -207,6 +736,56 @@ export default function App() {
       for (const [k, v] of Object.entries(saved)) mgr.setParam(k, v);
     }
   }, [activeViz]);
+
+  // ── Draw text overlay annotations ──────────────────────────────────────
+
+  const drawAnnotations = useCallback(() => {
+    const overlay = overlayRef.current;
+    const canvas = canvasRef.current;
+    if (!overlay || !canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    const devW = Math.round(cssW * dpr);
+    const devH = Math.round(cssH * dpr);
+
+    // Resize overlay buffer to device pixels for crisp text
+    if (overlay.width !== devW || overlay.height !== devH) {
+      overlay.width = devW;
+      overlay.height = devH;
+    }
+
+    const ctx = overlay.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, devW, devH);
+
+    // Scale context so annotation code works in CSS pixel coordinates
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    const renderer = ANNOTATION_RENDERERS[activeViz];
+    if (renderer) {
+      renderer(ctx, cssW, cssH, paramValues[activeViz] ?? {});
+    }
+
+    ctx.restore();
+  }, [activeViz, paramValues]);
+
+  // Redraw annotations when viz or params change
+  useEffect(() => {
+    // Small delay to let canvas sizing settle
+    const id = requestAnimationFrame(drawAnnotations);
+    return () => cancelAnimationFrame(id);
+  }, [drawAnnotations]);
+
+  // Also redraw on resize
+  useEffect(() => {
+    const onResize = () => drawAnnotations();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [drawAnnotations]);
 
   // ── Slider change handler ──────────────────────────────────────────────
 
@@ -287,7 +866,7 @@ export default function App() {
             {state.status === "ready" && (
               <Badge
                 variant="outline"
-                className="gap-1.5 border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                className="gap-1.5 border-emerald-500/50 text-emerald-600"
               >
                 <CircleCheck className="size-3" />
                 {glReady ? "Rendering" : "Engine ready"}
@@ -402,6 +981,10 @@ export default function App() {
           ref={canvasRef}
           id={CANVAS_ID}
           className="block h-full w-full"
+        />
+        <canvas
+          ref={overlayRef}
+          className="absolute inset-0 block h-full w-full pointer-events-none"
         />
       </main>
     </div>

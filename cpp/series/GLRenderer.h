@@ -96,7 +96,7 @@ public:
 
     void beginFrame(float width, float height) {
         glViewport(0, 0, static_cast<int>(width), static_cast<int>(height));
-        glClearColor(0.04f, 0.04f, 0.10f, 1.0f);
+        glClearColor(0.98f, 0.97f, 0.96f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(program_);
         glEnable(GL_BLEND);
