@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Generated WASM binary (rebuilt from C++ source)
+# Note: src/wasm/engine.js stub IS tracked; the real build overwrites it.
+src/wasm/engine.wasm
+
+# Editor
+.vscode/.cache/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local

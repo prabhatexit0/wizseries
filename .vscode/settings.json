@@ -1,0 +1,47 @@
+{
+  // ─── Disable Microsoft C/C++ IntelliSense to avoid conflicts with clangd ──
+  "C_Cpp.intelliSenseEngine": "disabled",
+
+  // ─── clangd configuration ────────────────────────────────────────────────
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build",
+    "--background-index",
+    "--clang-tidy",
+    "--header-insertion=iwyu",
+    "--completion-style=detailed",
+    "--function-arg-placeholders",
+    "-j=4"
+  ],
+  "clangd.path": "clangd",
+  "clangd.checkUpdates": true,
+
+  // ─── CMake Tools ──────────────────────────────────────────────────────────
+  "cmake.sourceDirectory": "${workspaceFolder}/cpp",
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.configureOnOpen": false,
+
+  // ─── Editor defaults ─────────────────────────────────────────────────────
+  "editor.formatOnSave": true,
+  "[cpp]": {
+    "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // ─── File associations ───────────────────────────────────────────────────
+  "files.associations": {
+    "*.cppm": "cpp"
+  },
+
+  // ─── Search exclusions ───────────────────────────────────────────────────
+  "search.exclude": {
+    "**/build": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "src/wasm/engine.*": true
+  }
+}
