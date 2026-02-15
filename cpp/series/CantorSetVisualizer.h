@@ -20,12 +20,16 @@ public:
         const int depth =
             std::clamp(static_cast<int>(getParam("depth", 6.0f)), 1, 12);
 
-        // Clip-space margins
-        constexpr float margin = 0.08f;
-        constexpr float xMin   = -1.0f + margin;
-        constexpr float xMax   =  1.0f - margin;
-        constexpr float yMin   = -1.0f + margin;
-        constexpr float yMax   =  1.0f - margin;
+        // Clip-space margins — extra left/bottom for axis labels
+        constexpr float mLeft   = 0.14f;
+        constexpr float mRight  = 0.06f;
+        constexpr float mBottom = 0.10f;
+        constexpr float mTop    = 0.08f;
+
+        const float xMin = -1.0f + mLeft;
+        const float xMax =  1.0f - mRight;
+        const float yMin = -1.0f + mBottom;
+        const float yMax =  1.0f - mTop;
 
         const float totalH = yMax - yMin;
         const float gap    = totalH / static_cast<float>(depth + 1);
@@ -40,20 +44,29 @@ public:
         generateCantor(quads, 0.0f, 1.0f, 0, depth,
                        xMin, xMax, yMax, barH, gap, revealed);
 
-        // Subtle axis lines
+        // ── Gridlines (subtle horizontal guides per level) ────────────────
+        std::vector<Vertex> grid;
+        for (int lv = 0; lv <= depth; ++lv) {
+            float y = yMax - static_cast<float>(lv) * gap - barH * 0.5f;
+            grid.push_back({xMin, y, 0.78f, 0.76f, 0.74f, 0.25f});
+            grid.push_back({xMax, y, 0.78f, 0.76f, 0.74f, 0.25f});
+        }
+
+        // ── Axes (dark grey for light background) ─────────────────────────
         std::vector<Vertex> axes;
-        axes.push_back({xMin, yMin, 0.25f, 0.25f, 0.35f, 0.6f});
-        axes.push_back({xMax, yMin, 0.25f, 0.25f, 0.35f, 0.6f});
-        axes.push_back({xMin, yMin, 0.25f, 0.25f, 0.35f, 0.6f});
-        axes.push_back({xMin, yMax, 0.25f, 0.25f, 0.35f, 0.6f});
+        axes.push_back({xMin, yMin, 0.30f, 0.28f, 0.26f, 0.8f});
+        axes.push_back({xMax, yMin, 0.30f, 0.28f, 0.26f, 0.8f});
+        axes.push_back({xMin, yMin, 0.30f, 0.28f, 0.26f, 0.8f});
+        axes.push_back({xMin, yMax, 0.30f, 0.28f, 0.26f, 0.8f});
 
         // Level separator tick marks on the left axis
         for (int lv = 0; lv <= depth; ++lv) {
             float y = yMax - static_cast<float>(lv) * gap - barH * 0.5f;
-            axes.push_back({xMin - 0.01f, y, 0.35f, 0.35f, 0.45f, 0.5f});
-            axes.push_back({xMin + 0.02f, y, 0.35f, 0.35f, 0.45f, 0.5f});
+            axes.push_back({xMin - 0.015f, y, 0.30f, 0.28f, 0.26f, 0.7f});
+            axes.push_back({xMin + 0.01f,  y, 0.30f, 0.28f, 0.26f, 0.7f});
         }
 
+        gl.drawLines(grid);
         gl.drawTriangles(quads);
         gl.drawLines(axes);
     }
@@ -77,12 +90,14 @@ private:
         const float y1 = yTop - static_cast<float>(level) * gap;
         const float y2 = y1 - barH;
 
-        // Hue walks from blue (0.58) → purple → pink as depth grows
+        // Rich indigo → violet → magenta for light background
         float cr{}, cg{}, cb{};
-        float hue = 0.58f + static_cast<float>(level) * 0.055f;
-        hsvToRgb(hue, 0.65f, 0.80f + 0.20f * alpha, cr, cg, cb);
+        float hue = 0.72f - static_cast<float>(level) * 0.04f;
+        float sat = 0.70f + 0.10f * alpha;
+        float val = 0.50f + 0.20f * alpha;
+        hsvToRgb(hue, sat, val, cr, cg, cb);
 
-        addQuad(quads, x1, y2, x2, y1, cr, cg, cb, alpha);
+        addQuad(quads, x1, y2, x2, y1, cr, cg, cb, alpha * 0.92f);
 
         // Recurse: keep first and last thirds, remove the middle
         const float third = (right - left) / 3.0f;

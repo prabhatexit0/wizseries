@@ -21,11 +21,16 @@ public:
             std::clamp(getParam("growth_rate", 4.0f), 1.0f, 4.0f);
         constexpr float rMin = 1.0f;
 
-        constexpr float margin = 0.08f;
-        constexpr float xMin   = -1.0f + margin;
-        constexpr float xMax   =  1.0f - margin;
-        constexpr float yMin   = -1.0f + margin;
-        constexpr float yMax   =  1.0f - margin;
+        // Extra left/bottom margins for axis labels
+        constexpr float mLeft   = 0.14f;
+        constexpr float mRight  = 0.06f;
+        constexpr float mBottom = 0.12f;
+        constexpr float mTop    = 0.08f;
+
+        const float xMin = -1.0f + mLeft;
+        const float xMax =  1.0f - mRight;
+        const float yMin = -1.0f + mBottom;
+        const float yMax =  1.0f - mTop;
 
         // Number of columns scales with canvas pixel width
         int cols = std::clamp(static_cast<int>(width * 0.7f), 200, 1400);
@@ -37,6 +42,23 @@ public:
         const float revealFrac = std::clamp(time * 0.5f, 0.0f, 1.0f);
         const int   visCols    = std::max(1, static_cast<int>(
                                      static_cast<float>(cols) * revealFrac));
+
+        // ── Gridlines ─────────────────────────────────────────────────────
+        std::vector<Vertex> grid;
+        // Horizontal gridlines at x = 0.25, 0.50, 0.75
+        for (float v : {0.25f, 0.50f, 0.75f}) {
+            float gy = yMin + (yMax - yMin) * v;
+            grid.push_back({xMin, gy, 0.78f, 0.76f, 0.74f, 0.22f});
+            grid.push_back({xMax, gy, 0.78f, 0.76f, 0.74f, 0.22f});
+        }
+        // Vertical gridlines at nice r values
+        for (float rv : {1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f}) {
+            if (rv < rMin || rv > rMax) continue;
+            float t = (rv - rMin) / (rMax - rMin);
+            float gx = xMin + (xMax - xMin) * t;
+            grid.push_back({gx, yMin, 0.78f, 0.76f, 0.74f, 0.22f});
+            grid.push_back({gx, yMax, 0.78f, 0.76f, 0.74f, 0.22f});
+        }
 
         std::vector<Vertex> points;
         points.reserve(static_cast<size_t>(visCols) * plotItr);
@@ -56,30 +78,47 @@ public:
                 x = r * x * (1.0f - x);
                 const float clipY = yMin + (yMax - yMin) * x;
 
-                // Colour: hue shifts from cyan to magenta across r
+                // Deep blue → purple palette for light background
                 float cr{}, cg{}, cb{};
-                float hue = 0.50f + 0.30f * t;
-                hsvToRgb(hue, 0.70f, 0.92f, cr, cg, cb);
+                float hue = 0.65f + 0.15f * t;
+                hsvToRgb(hue, 0.75f, 0.55f, cr, cg, cb);
 
-                points.push_back({clipX, clipY, cr, cg, cb, 0.55f});
+                points.push_back({clipX, clipY, cr, cg, cb, 0.60f});
             }
         }
 
-        // ── Axes ────────────────────────────────────────────────────────────
+        // ── Axes (dark for light background) ──────────────────────────────
         std::vector<Vertex> axes;
-        axes.push_back({xMin, yMin, 0.30f, 0.30f, 0.40f, 0.6f});
-        axes.push_back({xMax, yMin, 0.30f, 0.30f, 0.40f, 0.6f});
-        axes.push_back({xMin, yMin, 0.30f, 0.30f, 0.40f, 0.6f});
-        axes.push_back({xMin, yMax, 0.30f, 0.30f, 0.40f, 0.6f});
+        axes.push_back({xMin, yMin, 0.30f, 0.28f, 0.26f, 0.8f});
+        axes.push_back({xMax, yMin, 0.30f, 0.28f, 0.26f, 0.8f});
+        axes.push_back({xMin, yMin, 0.30f, 0.28f, 0.26f, 0.8f});
+        axes.push_back({xMin, yMax, 0.30f, 0.28f, 0.26f, 0.8f});
+
+        // X-axis (r) tick marks
+        for (float rv : {1.5f, 2.0f, 2.5f, 3.0f, 3.5f, 4.0f}) {
+            if (rv < rMin || rv > rMax) continue;
+            float t = (rv - rMin) / (rMax - rMin);
+            float tx = xMin + (xMax - xMin) * t;
+            axes.push_back({tx, yMin - 0.015f, 0.30f, 0.28f, 0.26f, 0.7f});
+            axes.push_back({tx, yMin + 0.01f,  0.30f, 0.28f, 0.26f, 0.7f});
+        }
+
+        // Y-axis (x) tick marks at 0.25, 0.50, 0.75
+        for (float v : {0.25f, 0.50f, 0.75f}) {
+            float ty = yMin + (yMax - yMin) * v;
+            axes.push_back({xMin - 0.015f, ty, 0.30f, 0.28f, 0.26f, 0.7f});
+            axes.push_back({xMin + 0.01f,  ty, 0.30f, 0.28f, 0.26f, 0.7f});
+        }
 
         // Onset-of-chaos marker at r ≈ 3.57
         if (rMax > 3.57f) {
             const float chaosT = (3.57f - rMin) / (rMax - rMin);
             const float cx     = xMin + (xMax - xMin) * chaosT;
-            axes.push_back({cx, yMin, 0.9f, 0.3f, 0.3f, 0.4f});
-            axes.push_back({cx, yMax, 0.9f, 0.3f, 0.3f, 0.4f});
+            axes.push_back({cx, yMin, 0.85f, 0.15f, 0.15f, 0.55f});
+            axes.push_back({cx, yMax, 0.85f, 0.15f, 0.15f, 0.55f});
         }
 
+        gl.drawLines(grid);
         gl.drawLines(axes);
         gl.drawPoints(points, 1.5f);
     }
