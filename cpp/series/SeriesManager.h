@@ -88,6 +88,11 @@ public:
         if (it != visualizers_.end()) it->second->setParam(name, value);
     }
 
+    /// Set the horizontal pan/zoom view transform.
+    void setView(float scale, float offsetX) {
+        renderer_.setView(scale, offsetX);
+    }
+
 private:
     std::unordered_map<std::string, std::unique_ptr<ISeriesVisualizer>>
         visualizers_;

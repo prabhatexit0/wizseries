@@ -17,7 +17,7 @@ public:
     void render(float time, float width, float /*height*/,
                 GLRenderer& gl) override {
         const int terms =
-            std::clamp(static_cast<int>(getParam("terms", 30.0f)), 1, 200);
+            std::clamp(static_cast<int>(getParam("terms", 30.0f)), 1, 2000);
 
         constexpr float mLeft   = 0.14f;
         constexpr float mRight  = 0.06f;

@@ -37,9 +37,12 @@ public:
             "layout(location = 0) in vec2 a_pos;\n"
             "layout(location = 1) in vec4 a_color;\n"
             "uniform float u_point_size;\n"
+            "uniform float u_view_scale;\n"
+            "uniform float u_view_offset;\n"
             "out vec4 v_color;\n"
             "void main() {\n"
-            "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+            "    gl_Position = vec4(a_pos.x * u_view_scale + u_view_offset,\n"
+            "                      a_pos.y, 0.0, 1.0);\n"
             "    gl_PointSize = u_point_size;\n"
             "    v_color = a_color;\n"
             "}\n";
@@ -69,7 +72,9 @@ public:
         glDeleteShader(vs);
         glDeleteShader(fs);
 
-        u_point_size_ = glGetUniformLocation(program_, "u_point_size");
+        u_point_size_  = glGetUniformLocation(program_, "u_point_size");
+        u_view_scale_  = glGetUniformLocation(program_, "u_view_scale");
+        u_view_offset_ = glGetUniformLocation(program_, "u_view_offset");
 
         glGenVertexArrays(1, &vao_);
         glGenBuffers(1, &vbo_);
@@ -99,8 +104,15 @@ public:
         glClearColor(0.98f, 0.97f, 0.96f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(program_);
+        glUniform1f(u_view_scale_,  view_scale_);
+        glUniform1f(u_view_offset_, view_offset_);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    void setView(float scale, float offset) {
+        view_scale_  = scale;
+        view_offset_ = offset;
     }
 
     void drawPoints(const std::vector<Vertex>& verts, float size = 2.0f) {
@@ -119,11 +131,15 @@ public:
     [[nodiscard]] bool isInitialized() const { return initialized_; }
 
 private:
-    GLuint program_     = 0;
-    GLuint vao_         = 0;
-    GLuint vbo_         = 0;
-    GLint  u_point_size_ = -1;
-    bool   initialized_  = false;
+    GLuint program_       = 0;
+    GLuint vao_           = 0;
+    GLuint vbo_           = 0;
+    GLint  u_point_size_  = -1;
+    GLint  u_view_scale_  = -1;
+    GLint  u_view_offset_ = -1;
+    float  view_scale_    = 1.0f;
+    float  view_offset_   = 0.0f;
+    bool   initialized_   = false;
 
     void draw(const std::vector<Vertex>& verts, GLenum mode, float ps) {
         glBindVertexArray(vao_);

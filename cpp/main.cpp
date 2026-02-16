@@ -129,5 +129,6 @@ EMSCRIPTEN_BINDINGS(engine) {
         .function("render",               &SeriesManager::render)
         .function("setActiveVisualizer",   &SeriesManager::setActiveVisualizer)
         .function("getActiveVisualizer",   &SeriesManager::getActiveVisualizer)
-        .function("setParam",             &SeriesManager::setParam);
+        .function("setParam",             &SeriesManager::setParam)
+        .function("setView",              &SeriesManager::setView);
 }

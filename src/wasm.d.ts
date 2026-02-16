@@ -23,6 +23,9 @@ export interface SeriesManager {
   /** Set a named parameter on the active visualizer. */
   setParam(name: string, value: number): void;
 
+  /** Set the horizontal pan/zoom view transform. */
+  setView(scale: number, offsetX: number): void;
+
   /** Release the C++ instance (call when done). */
   delete(): void;
 }
