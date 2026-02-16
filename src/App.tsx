@@ -28,7 +28,17 @@ const CANVAS_ID = "wiz-canvas";
 
 // ─── Visualizer catalogue ───────────────────────────────────────────────────
 
-type VisualizerName = "cantor" | "harmonic" | "geometric" | "logistic";
+type VisualizerName =
+  | "cantor"
+  | "harmonic"
+  | "geometric"
+  | "logistic"
+  | "basel"
+  | "alt_harmonic"
+  | "e_series"
+  | "inv_geometric"
+  | "gregory_leibniz"
+  | "apery";
 
 interface ParamDef {
   name: string;
@@ -63,7 +73,7 @@ const VISUALIZERS: Record<VisualizerName, VisualizerConfig> = {
         name: "terms",
         label: "Terms",
         min: 1,
-        max: 200,
+        max: 2000,
         step: 1,
         default: 30,
       },
@@ -107,6 +117,96 @@ const VISUALIZERS: Record<VisualizerName, VisualizerConfig> = {
       },
     ],
   },
+  basel: {
+    label: "Basel Problem",
+    description:
+      "The sum \u2211 1/n\u00B2 converges to \u03C0\u00B2/6 \u2248 1.6449. Euler\u2019s famous result connecting rational inverse squares to an irrational, \u03C0-based geometric constant.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 2000,
+        step: 1,
+        default: 40,
+      },
+    ],
+  },
+  alt_harmonic: {
+    label: "Alternating Harmonic",
+    description:
+      "The sum \u2211 (\u22121)\u207F\u207A\u00B9/n converges conditionally to ln(2) \u2248 0.6931. A series that balances perfectly on the edge of infinity.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 2000,
+        step: 1,
+        default: 30,
+      },
+    ],
+  },
+  e_series: {
+    label: "Series for e",
+    description:
+      "The sum \u2211 1/n! converges rapidly to Euler\u2019s number e \u2248 2.71828 due to the massive growth rate of factorials. Just 10 terms already give 7 digits of accuracy.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 25,
+        step: 1,
+        default: 12,
+      },
+    ],
+  },
+  inv_geometric: {
+    label: "Geometric (1/2\u207F)",
+    description:
+      "The sum \u2211 1/2\u207F = 1. The classic proof that infinitely many decreasing positive quantities can perfectly fill a finite boundary.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 40,
+        step: 1,
+        default: 15,
+      },
+    ],
+  },
+  gregory_leibniz: {
+    label: "Gregory\u2013Leibniz",
+    description:
+      "The sum \u2211 (\u22121)\u207F/(2n+1) = \u03C0/4 \u2248 0.7854. An elegantly simple alternating sum of odd reciprocals that maps directly to \u03C0.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 2000,
+        step: 1,
+        default: 40,
+      },
+    ],
+  },
+  apery: {
+    label: "Ap\u00E9ry\u2019s Constant",
+    description:
+      "The sum \u2211 1/n\u00B3 \u2248 1.20206\u2026 (the Riemann zeta function \u03B6(3)). Famously proven irrational by Ap\u00E9ry, though its exact closed form remains a mystery.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 2000,
+        step: 1,
+        default: 30,
+      },
+    ],
+  },
 };
 
 const VIZ_KEYS = Object.keys(VISUALIZERS) as VisualizerName[];
@@ -130,6 +230,25 @@ function clipToPixelX(clipX: number, w: number): number {
 }
 function clipToPixelY(clipY: number, h: number): number {
   return ((1 - clipY) / 2) * h;
+}
+
+// Module-level view state set before each annotation render pass.
+let _vScale = 1;
+let _vOffset = 0;
+
+/** clipToPixelX with the current pan/zoom view transform applied. */
+function viewClipX(clipX: number, w: number): number {
+  return ((clipX * _vScale + _vOffset + 1) / 2) * w;
+}
+
+/** Pick sensible x-axis tick spacing for a given number of terms. */
+function xTickStep(terms: number): number {
+  if (terms <= 10) return 1;
+  if (terms <= 50) return 5;
+  if (terms <= 100) return 10;
+  if (terms <= 500) return 50;
+  if (terms <= 1000) return 100;
+  return 250;
 }
 
 // ─── Annotation renderers ───────────────────────────────────────────────────
@@ -223,7 +342,7 @@ function drawHarmonicAnnotations(
   h: number,
   params: Record<string, number>,
 ) {
-  const terms = Math.min(500, Math.max(1, Math.round(params.terms ?? 30)));
+  const terms = Math.min(2000, Math.max(1, Math.round(params.terms ?? 30)));
 
   const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
   const xMin = -1 + mLeft, xMax = 1 - mRight;
@@ -256,14 +375,11 @@ function drawHarmonicAnnotations(
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const barW = (xMax - xMin) / terms;
-  // Pick sensible x-tick spacing
-  let xStep = 1;
-  if (terms > 10) xStep = 5;
-  if (terms > 50) xStep = 10;
-  if (terms > 100) xStep = 25;
-  for (let k = 1; k <= terms; k += xStep) {
+  const step2 = xTickStep(terms);
+  for (let k = 1; k <= terms; k += step2) {
     const cx = xMin + (k - 0.5) * barW;
-    const px = clipToPixelX(cx, w);
+    const px = viewClipX(cx, w);
+    if (px < 0 || px > w) continue;
     const py = clipToPixelY(yMin - 0.02, h);
     ctx.fillText(`${k}`, px, py);
   }
@@ -403,16 +519,16 @@ function drawGeometricAnnotations(
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   const barW = (xMax - xMin) / terms;
-  let xStep = 1;
-  if (terms > 10) xStep = 2;
-  if (terms > 20) xStep = 5;
-  for (let k = 0; k < terms; k += xStep) {
-    const cx = xMin + (k + 0.5) * barW;
-    const px = clipToPixelX(cx, w);
-    // Place below the zero line or below the bottom axis
-    const py = clipToPixelY(-1 + mBottom - 0.02, h);
-    ctx.fillStyle = LABEL_COLOR;
-    ctx.fillText(`${k}`, px, py);
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 0; k < terms; k += step2) {
+      const cx = xMin + (k + 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      const py = clipToPixelY(-1 + mBottom - 0.02, h);
+      ctx.fillStyle = LABEL_COLOR;
+      ctx.fillText(`${k}`, px, py);
+    }
   }
 
   // Y-axis label
@@ -507,7 +623,8 @@ function drawLogisticAnnotations(
   for (const rv of [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]) {
     if (rv < rMin || rv > rMax + 0.01) continue;
     const t = (rv - rMin) / (rMax - rMin);
-    const px = clipToPixelX(xMin + (xMax - xMin) * t, w);
+    const px = viewClipX(xMin + (xMax - xMin) * t, w);
+    if (px < 0 || px > w) continue;
     const py = clipToPixelY(yMin - 0.025, h);
     ctx.fillText(rv.toFixed(1), px, py);
   }
@@ -516,20 +633,23 @@ function drawLogisticAnnotations(
   if (rMax > 3.57) {
     const chaosT = (3.57 - rMin) / (rMax - rMin);
     const cx = xMin + (xMax - xMin) * chaosT;
-    ctx.font = `italic ${baseFontSize * 0.85}px system-ui, sans-serif`;
-    ctx.fillStyle = "#a82020";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(
-      "r \u2248 3.57",
-      clipToPixelX(cx + 0.01, w),
-      clipToPixelY(yMax - 0.02, h),
-    );
-    ctx.fillText(
-      "(chaos)",
-      clipToPixelX(cx + 0.01, w),
-      clipToPixelY(yMax - 0.02, h) + baseFontSize * 1.1,
-    );
+    const chaosPx = viewClipX(cx + 0.01, w);
+    if (chaosPx >= 0 && chaosPx <= w) {
+      ctx.font = `italic ${baseFontSize * 0.85}px system-ui, sans-serif`;
+      ctx.fillStyle = "#a82020";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(
+        "r \u2248 3.57",
+        chaosPx,
+        clipToPixelY(yMax - 0.02, h),
+      );
+      ctx.fillText(
+        "(chaos)",
+        chaosPx,
+        clipToPixelY(yMax - 0.02, h) + baseFontSize * 1.1,
+      );
+    }
   }
 
   // Y-axis (x) tick labels
@@ -624,6 +744,636 @@ function formatTick(v: number): string {
   return v.toFixed(2);
 }
 
+// ─── New converging series annotation renderers ─────────────────────────────
+
+function drawBaselAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(2000, Math.max(1, Math.round(params.terms ?? 40)));
+  const LIMIT = Math.PI * Math.PI / 6;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = LIMIT * 1.15;
+
+  // Compute partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) partialSum += 1 / (n * n);
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  const step = 0.5;
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += step) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(1), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 1; k <= terms; k += step2) {
+      const cx = xMin + (k - 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      ctx.fillText(`${k}`, px, clipToPixelY(yMin - 0.02, h));
+    }
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ylX = clipToPixelX(-1 + 0.03, w);
+  const ylY = clipToPixelY((yMin + yMax) / 2, h);
+  ctx.translate(ylX, ylY);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/n\u00B2,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = \u03C0\u00B2/6 \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawAltHarmonicAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(2000, Math.max(1, Math.round(params.terms ?? 30)));
+  const LIMIT = Math.LN2;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMid = 0;
+  const yExt = 1 - Math.max(mTop, mBottom);
+
+  // Pre-scan for scaling
+  let maxAbsVal = 0, maxAbsSum = 0;
+  {
+    let s = 0;
+    for (let n = 1; n <= terms; n++) {
+      const sign = n % 2 === 1 ? 1 : -1;
+      const term = sign / n;
+      maxAbsVal = Math.max(maxAbsVal, Math.abs(term));
+      s += term;
+      maxAbsSum = Math.max(maxAbsSum, Math.abs(s));
+    }
+  }
+  const scale = Math.max(maxAbsVal, maxAbsSum, 0.001);
+
+  // Compute final partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) {
+    const sign = n % 2 === 1 ? 1 : -1;
+    partialSum += sign / n;
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+  ctx.textBaseline = "middle";
+
+  // Y-axis tick labels (symmetric around 0)
+  let tickStep = scale / 4;
+  if (tickStep < 0.01) tickStep = 0.01;
+  const mag = Math.pow(10, Math.floor(Math.log10(tickStep)));
+  tickStep = Math.ceil(tickStep / mag) * mag;
+
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText("0", clipToPixelX(xMin - 0.025, w), clipToPixelY(yMid, h));
+
+  for (let v = tickStep; v < scale; v += tickStep) {
+    const cyP = yMid + (v / scale) * yExt;
+    ctx.fillText(formatTick(v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyP, h));
+    const cyN = yMid - (v / scale) * yExt;
+    ctx.fillText(formatTick(-v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyN, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 1; k <= terms; k += step2) {
+      const cx = xMin + (k - 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      ctx.fillText(`${k}`, px, clipToPixelY(-1 + mBottom - 0.02, h));
+    }
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.025, w), clipToPixelY(0, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(-1 + mBottom - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 (\u22121)\u207F\u207A\u00B9/n,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(1 - mTop + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = ln(2) \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawESeriesAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(25, Math.max(1, Math.round(params.terms ?? 12)));
+  const E_LIMIT = Math.E;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = E_LIMIT * 1.12;
+
+  // Compute partial sum
+  let partialSum = 0;
+  let factorial = 1;
+  for (let n = 0; n < terms; n++) {
+    if (n > 0) factorial *= n;
+    partialSum += 1 / factorial;
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += 0.5) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(1), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 0; k < terms; k += step2) {
+      const cx = xMin + (k + 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      ctx.fillText(`${k}`, px, clipToPixelY(yMin - 0.02, h));
+    }
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.03, w), clipToPixelY((yMin + yMax) / 2, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/n!,  n = 0\u2026${terms - 1}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(8)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = e \u2248 ${E_LIMIT.toFixed(8)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawInvGeometricAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(40, Math.max(1, Math.round(params.terms ?? 15)));
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = 1.15;
+
+  // Compute partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) partialSum += 1 / Math.pow(2, n);
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v <= 1.0; v += 0.25) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(2), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 1; k <= terms; k += step2) {
+      const cx = xMin + (k - 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      ctx.fillText(`${k}`, px, clipToPixelY(yMin - 0.02, h));
+    }
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.03, w), clipToPixelY((yMin + yMax) / 2, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/2\u207F,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(8)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    "Limit = 1",
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawGregoryLeibnizAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(2000, Math.max(1, Math.round(params.terms ?? 40)));
+  const LIMIT = Math.PI / 4;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMid = 0;
+  const yExt = 1 - Math.max(mTop, mBottom);
+
+  // Pre-scan for scaling
+  let maxAbsVal = 0, maxAbsSum = 0;
+  {
+    let s = 0;
+    for (let n = 0; n < terms; n++) {
+      const sign = n % 2 === 0 ? 1 : -1;
+      const term = sign / (2 * n + 1);
+      maxAbsVal = Math.max(maxAbsVal, Math.abs(term));
+      s += term;
+      maxAbsSum = Math.max(maxAbsSum, Math.abs(s));
+    }
+  }
+  const scale = Math.max(maxAbsVal, maxAbsSum, 0.001);
+
+  // Compute final partial sum
+  let partialSum = 0;
+  for (let n = 0; n < terms; n++) {
+    const sign = n % 2 === 0 ? 1 : -1;
+    partialSum += sign / (2 * n + 1);
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+  ctx.textBaseline = "middle";
+
+  // Y-axis tick labels (symmetric around 0)
+  let tickStep = scale / 4;
+  if (tickStep < 0.01) tickStep = 0.01;
+  const mag = Math.pow(10, Math.floor(Math.log10(tickStep)));
+  tickStep = Math.ceil(tickStep / mag) * mag;
+
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText("0", clipToPixelX(xMin - 0.025, w), clipToPixelY(yMid, h));
+
+  for (let v = tickStep; v < scale; v += tickStep) {
+    const cyP = yMid + (v / scale) * yExt;
+    ctx.fillText(formatTick(v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyP, h));
+    const cyN = yMid - (v / scale) * yExt;
+    ctx.fillText(formatTick(-v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyN, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 0; k < terms; k += step2) {
+      const cx = xMin + (k + 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      ctx.fillText(`${k}`, px, clipToPixelY(-1 + mBottom - 0.02, h));
+    }
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.025, w), clipToPixelY(0, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(-1 + mBottom - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 (\u22121)\u207F/(2n+1),  n = 0\u2026${terms - 1}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(1 - mTop + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = \u03C0/4 \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawAperyAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(2000, Math.max(1, Math.round(params.terms ?? 30)));
+  const LIMIT = 1.20205690;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = LIMIT * 1.15;
+
+  // Compute partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) partialSum += 1 / (n * n * n);
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += 0.25) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(2), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  {
+    const step2 = xTickStep(terms);
+    for (let k = 1; k <= terms; k += step2) {
+      const cx = xMin + (k - 0.5) * barW;
+      const px = viewClipX(cx, w);
+      if (px < 0 || px > w) continue;
+      ctx.fillText(`${k}`, px, clipToPixelY(yMin - 0.02, h));
+    }
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.03, w), clipToPixelY((yMin + yMax) / 2, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/n\u00B3,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = \u03B6(3) \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
 // ─── Annotation dispatch ────────────────────────────────────────────────────
 
 const ANNOTATION_RENDERERS: Record<
@@ -639,6 +1389,12 @@ const ANNOTATION_RENDERERS: Record<
   harmonic: drawHarmonicAnnotations,
   geometric: drawGeometricAnnotations,
   logistic: drawLogisticAnnotations,
+  basel: drawBaselAnnotations,
+  alt_harmonic: drawAltHarmonicAnnotations,
+  e_series: drawESeriesAnnotations,
+  inv_geometric: drawInvGeometricAnnotations,
+  gregory_leibniz: drawGregoryLeibnizAnnotations,
+  apery: drawAperyAnnotations,
 };
 
 // ─── App ────────────────────────────────────────────────────────────────────
@@ -656,17 +1412,100 @@ export default function App() {
   const [paramValues, setParamValues] = useState(buildDefaults);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Keep a ref so the visualizer-switch effect can read the latest params
-  // without re-running every time a slider moves.
+  // Keep refs so the animation loop and event handlers can read the latest
+  // values without stale closures.
   const paramValuesRef = useRef(paramValues);
   paramValuesRef.current = paramValues;
+  const activeVizRef = useRef(activeViz);
+  activeVizRef.current = activeViz;
 
-  // ── Initialise WebGL context + animation loop ──────────────────────────
+  // ── Pan / zoom view state (refs for 60 fps performance) ───────────────
+  const viewScaleRef = useRef(1);
+  const viewOffsetRef = useRef(0);
+
+  /** Push current view state to the C++ GL renderer. */
+  const syncView = useCallback(() => {
+    const mgr = managerRef.current;
+    if (mgr && typeof mgr.setView === "function") {
+      mgr.setView(viewScaleRef.current, viewOffsetRef.current);
+    }
+  }, []);
+
+  /** Reset zoom to 1× and pan to center. */
+  const resetView = useCallback(() => {
+    viewScaleRef.current = 1;
+    viewOffsetRef.current = 0;
+    syncView();
+  }, [syncView]);
+
+  // ── Helper: immediately switch the C++ engine to a visualizer ─────────
+
+  const switchVisualizer = useCallback(
+    (name: VisualizerName) => {
+      const mgr = managerRef.current;
+      if (!mgr) return;
+      mgr.setActiveVisualizer(name);
+      t0Ref.current = performance.now() / 1000;
+      const saved = paramValuesRef.current[name];
+      if (saved) {
+        for (const [k, v] of Object.entries(saved)) mgr.setParam(k, v);
+      }
+      // Reset view on switch
+      viewScaleRef.current = 1;
+      viewOffsetRef.current = 0;
+      if (typeof mgr.setView === "function") mgr.setView(1, 0);
+    },
+    [],
+  );
+
+  // ── Draw text overlay annotations ─────────────────────────────────────
+  // Drawn every frame inside the animation loop so it stays in sync with
+  // the GL canvas during pan/zoom.
+
+  const drawAnnotations = useCallback(() => {
+    const overlay = overlayRef.current;
+    const canvas = canvasRef.current;
+    if (!overlay || !canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth;
+    const cssH = canvas.clientHeight;
+    const devW = Math.round(cssW * dpr);
+    const devH = Math.round(cssH * dpr);
+
+    if (overlay.width !== devW || overlay.height !== devH) {
+      overlay.width = devW;
+      overlay.height = devH;
+    }
+
+    const ctx = overlay.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, devW, devH);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    // Set module-level view state for viewClipX
+    _vScale = viewScaleRef.current;
+    _vOffset = viewOffsetRef.current;
+
+    const viz = activeVizRef.current;
+    const renderer = ANNOTATION_RENDERERS[viz];
+    if (renderer) {
+      renderer(ctx, cssW, cssH, paramValuesRef.current[viz] ?? {});
+    }
+
+    ctx.restore();
+  }, []);
+
+  const drawAnnotationsRef = useRef(drawAnnotations);
+  drawAnnotationsRef.current = drawAnnotations;
+
+  // ── Initialise WebGL context + animation loop ─────────────────────────
 
   useEffect(() => {
     if (state.status !== "ready" || !engine || !canvasRef.current) return;
 
-    // Set the canvas buffer to match its CSS layout size, scaled for HiDPI
     const canvas = canvasRef.current;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(canvas.clientWidth * dpr);
@@ -687,6 +1526,8 @@ export default function App() {
         if (c && managerRef.current) {
           managerRef.current.render(t, c.width, c.height);
         }
+        // Redraw annotations every frame (keeps in sync during pan/zoom)
+        drawAnnotationsRef.current();
         animRef.current = requestAnimationFrame(loop);
       };
       animRef.current = requestAnimationFrame(loop);
@@ -701,7 +1542,7 @@ export default function App() {
     };
   }, [state.status, engine]);
 
-  // ── Resize canvas buffer on window resize ──────────────────────────────
+  // ── Resize canvas buffer on window resize ─────────────────────────────
 
   useEffect(() => {
     const onResize = () => {
@@ -711,7 +1552,6 @@ export default function App() {
       c.width = Math.round(c.clientWidth * dpr);
       c.height = Math.round(c.clientHeight * dpr);
 
-      // Also resize the overlay (device pixels)
       const o = overlayRef.current;
       if (o) {
         o.width = Math.round(c.clientWidth * dpr);
@@ -722,72 +1562,181 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // ── Switch active visualizer and push saved params ─────────────────────
+  // ── Sync visualizer on mount (backup for initial state) ───────────────
 
   useEffect(() => {
-    const mgr = managerRef.current;
-    if (!mgr) return;
+    switchVisualizer(activeViz);
+  }, [activeViz, switchVisualizer]);
 
-    mgr.setActiveVisualizer(activeViz);
-    t0Ref.current = performance.now() / 1000; // restart entry animation
+  // ── Pan / zoom pointer event handlers ─────────────────────────────────
 
-    const saved = paramValuesRef.current[activeViz];
-    if (saved) {
-      for (const [k, v] of Object.entries(saved)) mgr.setParam(k, v);
-    }
-  }, [activeViz]);
-
-  // ── Draw text overlay annotations ──────────────────────────────────────
-
-  const drawAnnotations = useCallback(() => {
-    const overlay = overlayRef.current;
-    const canvas = canvasRef.current;
-    if (!overlay || !canvas) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const cssW = canvas.clientWidth;
-    const cssH = canvas.clientHeight;
-    const devW = Math.round(cssW * dpr);
-    const devH = Math.round(cssH * dpr);
-
-    // Resize overlay buffer to device pixels for crisp text
-    if (overlay.width !== devW || overlay.height !== devH) {
-      overlay.width = devW;
-      overlay.height = devH;
-    }
-
-    const ctx = overlay.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, devW, devH);
-
-    // Scale context so annotation code works in CSS pixel coordinates
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    const renderer = ANNOTATION_RENDERERS[activeViz];
-    if (renderer) {
-      renderer(ctx, cssW, cssH, paramValues[activeViz] ?? {});
-    }
-
-    ctx.restore();
-  }, [activeViz, paramValues]);
-
-  // Redraw annotations when viz or params change
   useEffect(() => {
-    // Small delay to let canvas sizing settle
-    const id = requestAnimationFrame(drawAnnotations);
-    return () => cancelAnimationFrame(id);
-  }, [drawAnnotations]);
+    const el = overlayRef.current;
+    if (!el) return;
 
-  // Also redraw on resize
-  useEffect(() => {
-    const onResize = () => drawAnnotations();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [drawAnnotations]);
+    // ── Mouse drag state ────────────────────────────────────────────
+    let dragging = false;
+    let lastX = 0;
 
-  // ── Slider change handler ──────────────────────────────────────────────
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return; // left button only
+      dragging = true;
+      lastX = e.clientX;
+      el.setPointerCapture(e.pointerId);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      lastX = e.clientX;
+      // Convert pixel delta to clip-space offset: 2 clip units = el width
+      const clipDx = (dx / el.clientWidth) * 2;
+      viewOffsetRef.current += clipDx;
+      syncView();
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (dragging) {
+        dragging = false;
+        el.releasePointerCapture(e.pointerId);
+      }
+    };
+
+    // ── Wheel: scroll = pan, ctrl/meta+scroll = zoom ────────────────
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom toward cursor
+        const rect = el.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        // Cursor position in clip space (before transform)
+        const cursorClip =
+          ((mx / rect.width) * 2 - 1 - viewOffsetRef.current) /
+          viewScaleRef.current;
+
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        const newScale = Math.max(
+          0.1,
+          Math.min(100, viewScaleRef.current * zoomFactor),
+        );
+
+        // Adjust offset so the point under the cursor stays fixed
+        viewOffsetRef.current =
+          viewOffsetRef.current -
+          cursorClip * (newScale - viewScaleRef.current);
+        viewScaleRef.current = newScale;
+      } else {
+        // Pan horizontally (deltaX for trackpad side-scroll, deltaY for wheel)
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY)
+          ? e.deltaX
+          : e.deltaY;
+        const clipDx = (-delta / el.clientWidth) * 2;
+        viewOffsetRef.current += clipDx;
+      }
+
+      syncView();
+    };
+
+    // ── Touch pinch-to-zoom ─────────────────────────────────────────
+    let lastTouchDist = 0;
+    let lastTouchCenterX = 0;
+    let activeTouches: Touch[] = [];
+
+    const onTouchStart = (e: TouchEvent) => {
+      activeTouches = Array.from(e.touches);
+      if (activeTouches.length === 2) {
+        e.preventDefault();
+        const a = activeTouches[0]!;
+        const b = activeTouches[1]!;
+        lastTouchDist = Math.abs(a.clientX - b.clientX);
+        lastTouchCenterX = (a.clientX + b.clientX) / 2;
+      } else if (activeTouches.length === 1) {
+        lastX = activeTouches[0]!.clientX;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const touches = Array.from(e.touches);
+
+      if (touches.length === 2) {
+        e.preventDefault();
+        const a = touches[0]!;
+        const b = touches[1]!;
+        const dist = Math.abs(a.clientX - b.clientX);
+        const centerX = (a.clientX + b.clientX) / 2;
+
+        if (lastTouchDist > 0) {
+          const rect = el.getBoundingClientRect();
+
+          // Zoom
+          const zoomFactor = dist / lastTouchDist;
+          const cursorClip =
+            ((centerX - rect.left) / rect.width * 2 - 1 - viewOffsetRef.current) /
+            viewScaleRef.current;
+
+          const newScale = Math.max(
+            0.1,
+            Math.min(100, viewScaleRef.current * zoomFactor),
+          );
+          viewOffsetRef.current -= cursorClip * (newScale - viewScaleRef.current);
+          viewScaleRef.current = newScale;
+
+          // Pan from center movement
+          const dx = centerX - lastTouchCenterX;
+          viewOffsetRef.current += (dx / rect.width) * 2;
+
+          syncView();
+        }
+
+        lastTouchDist = dist;
+        lastTouchCenterX = centerX;
+      } else if (touches.length === 1) {
+        const t0 = touches[0]!;
+        const dx = t0.clientX - lastX;
+        lastX = t0.clientX;
+        viewOffsetRef.current += (dx / el.clientWidth) * 2;
+        syncView();
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      activeTouches = Array.from(e.touches);
+      if (activeTouches.length < 2) {
+        lastTouchDist = 0;
+      }
+      if (activeTouches.length === 1) {
+        lastX = activeTouches[0]!.clientX;
+      }
+    };
+
+    // ── Double-click to reset view ──────────────────────────────────
+    const onDblClick = () => resetView();
+
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("dblclick", onDblClick);
+
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("dblclick", onDblClick);
+    };
+  }, [syncView, resetView]);
+
+  // ── Slider change handler ─────────────────────────────────────────────
 
   const handleParam = useCallback(
     (name: string, value: number) => {
@@ -800,12 +1749,12 @@ export default function App() {
     [activeViz],
   );
 
-  // ── Derived state ──────────────────────────────────────────────────────
+  // ── Derived state ─────────────────────────────────────────────────────
 
   const config = VISUALIZERS[activeViz];
   const curParams = paramValues[activeViz] ?? {};
 
-  // ── Render ─────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -882,8 +1831,11 @@ export default function App() {
                 id="viz-select"
                 value={activeViz}
                 onChange={(e) => {
-                  setActiveViz(e.target.value as VisualizerName);
+                  const newViz = e.target.value as VisualizerName;
+                  setActiveViz(newViz);
                   setSidebarOpen(false);
+                  // Immediately switch the C++ engine (fixes stale-frame bug)
+                  switchVisualizer(newViz);
                 }}
                 disabled={state.status !== "ready"}
                 className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2.5 sm:py-2 pr-8 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
@@ -984,7 +1936,8 @@ export default function App() {
         />
         <canvas
           ref={overlayRef}
-          className="absolute inset-0 block h-full w-full pointer-events-none"
+          className="absolute inset-0 block h-full w-full cursor-grab active:cursor-grabbing"
+          style={{ touchAction: "none" }}
         />
       </main>
     </div>
