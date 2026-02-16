@@ -28,7 +28,17 @@ const CANVAS_ID = "wiz-canvas";
 
 // ─── Visualizer catalogue ───────────────────────────────────────────────────
 
-type VisualizerName = "cantor" | "harmonic" | "geometric" | "logistic";
+type VisualizerName =
+  | "cantor"
+  | "harmonic"
+  | "geometric"
+  | "logistic"
+  | "basel"
+  | "alt_harmonic"
+  | "e_series"
+  | "inv_geometric"
+  | "gregory_leibniz"
+  | "apery";
 
 interface ParamDef {
   name: string;
@@ -104,6 +114,96 @@ const VISUALIZERS: Record<VisualizerName, VisualizerConfig> = {
         max: 4.0,
         step: 0.01,
         default: 4.0,
+      },
+    ],
+  },
+  basel: {
+    label: "Basel Problem",
+    description:
+      "The sum \u2211 1/n\u00B2 converges to \u03C0\u00B2/6 \u2248 1.6449. Euler\u2019s famous result connecting rational inverse squares to an irrational, \u03C0-based geometric constant.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 200,
+        step: 1,
+        default: 40,
+      },
+    ],
+  },
+  alt_harmonic: {
+    label: "Alternating Harmonic",
+    description:
+      "The sum \u2211 (\u22121)\u207F\u207A\u00B9/n converges conditionally to ln(2) \u2248 0.6931. A series that balances perfectly on the edge of infinity.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 200,
+        step: 1,
+        default: 30,
+      },
+    ],
+  },
+  e_series: {
+    label: "Series for e",
+    description:
+      "The sum \u2211 1/n! converges rapidly to Euler\u2019s number e \u2248 2.71828 due to the massive growth rate of factorials. Just 10 terms already give 7 digits of accuracy.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 25,
+        step: 1,
+        default: 12,
+      },
+    ],
+  },
+  inv_geometric: {
+    label: "Geometric (1/2\u207F)",
+    description:
+      "The sum \u2211 1/2\u207F = 1. The classic proof that infinitely many decreasing positive quantities can perfectly fill a finite boundary.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 40,
+        step: 1,
+        default: 15,
+      },
+    ],
+  },
+  gregory_leibniz: {
+    label: "Gregory\u2013Leibniz",
+    description:
+      "The sum \u2211 (\u22121)\u207F/(2n+1) = \u03C0/4 \u2248 0.7854. An elegantly simple alternating sum of odd reciprocals that maps directly to \u03C0.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 200,
+        step: 1,
+        default: 40,
+      },
+    ],
+  },
+  apery: {
+    label: "Ap\u00E9ry\u2019s Constant",
+    description:
+      "The sum \u2211 1/n\u00B3 \u2248 1.20206\u2026 (the Riemann zeta function \u03B6(3)). Famously proven irrational by Ap\u00E9ry, though its exact closed form remains a mystery.",
+    params: [
+      {
+        name: "terms",
+        label: "Terms",
+        min: 1,
+        max: 200,
+        step: 1,
+        default: 30,
       },
     ],
   },
@@ -624,6 +724,627 @@ function formatTick(v: number): string {
   return v.toFixed(2);
 }
 
+// ─── New converging series annotation renderers ─────────────────────────────
+
+function drawBaselAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(200, Math.max(1, Math.round(params.terms ?? 40)));
+  const LIMIT = Math.PI * Math.PI / 6;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = LIMIT * 1.15;
+
+  // Compute partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) partialSum += 1 / (n * n);
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  const step = 0.5;
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += step) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(1), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 10) xStep = 5;
+  if (terms > 50) xStep = 10;
+  if (terms > 100) xStep = 25;
+  for (let k = 1; k <= terms; k += xStep) {
+    const cx = xMin + (k - 0.5) * barW;
+    ctx.fillText(`${k}`, clipToPixelX(cx, w), clipToPixelY(yMin - 0.02, h));
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ylX = clipToPixelX(-1 + 0.03, w);
+  const ylY = clipToPixelY((yMin + yMax) / 2, h);
+  ctx.translate(ylX, ylY);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/n\u00B2,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = \u03C0\u00B2/6 \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawAltHarmonicAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(200, Math.max(1, Math.round(params.terms ?? 30)));
+  const LIMIT = Math.LN2;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMid = 0;
+  const yExt = 1 - Math.max(mTop, mBottom);
+
+  // Pre-scan for scaling
+  let maxAbsVal = 0, maxAbsSum = 0;
+  {
+    let s = 0;
+    for (let n = 1; n <= terms; n++) {
+      const sign = n % 2 === 1 ? 1 : -1;
+      const term = sign / n;
+      maxAbsVal = Math.max(maxAbsVal, Math.abs(term));
+      s += term;
+      maxAbsSum = Math.max(maxAbsSum, Math.abs(s));
+    }
+  }
+  const scale = Math.max(maxAbsVal, maxAbsSum, 0.001);
+
+  // Compute final partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) {
+    const sign = n % 2 === 1 ? 1 : -1;
+    partialSum += sign / n;
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+  ctx.textBaseline = "middle";
+
+  // Y-axis tick labels (symmetric around 0)
+  let tickStep = scale / 4;
+  if (tickStep < 0.01) tickStep = 0.01;
+  const mag = Math.pow(10, Math.floor(Math.log10(tickStep)));
+  tickStep = Math.ceil(tickStep / mag) * mag;
+
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText("0", clipToPixelX(xMin - 0.025, w), clipToPixelY(yMid, h));
+
+  for (let v = tickStep; v < scale; v += tickStep) {
+    const cyP = yMid + (v / scale) * yExt;
+    ctx.fillText(formatTick(v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyP, h));
+    const cyN = yMid - (v / scale) * yExt;
+    ctx.fillText(formatTick(-v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyN, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 10) xStep = 5;
+  if (terms > 50) xStep = 10;
+  if (terms > 100) xStep = 25;
+  for (let k = 1; k <= terms; k += xStep) {
+    const cx = xMin + (k - 0.5) * barW;
+    ctx.fillText(`${k}`, clipToPixelX(cx, w), clipToPixelY(-1 + mBottom - 0.02, h));
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.025, w), clipToPixelY(0, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(-1 + mBottom - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 (\u22121)\u207F\u207A\u00B9/n,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(1 - mTop + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = ln(2) \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawESeriesAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(25, Math.max(1, Math.round(params.terms ?? 12)));
+  const E_LIMIT = Math.E;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = E_LIMIT * 1.12;
+
+  // Compute partial sum
+  let partialSum = 0;
+  let factorial = 1;
+  for (let n = 0; n < terms; n++) {
+    if (n > 0) factorial *= n;
+    partialSum += 1 / factorial;
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += 0.5) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(1), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 12) xStep = 2;
+  for (let k = 0; k < terms; k += xStep) {
+    const cx = xMin + (k + 0.5) * barW;
+    ctx.fillText(`${k}`, clipToPixelX(cx, w), clipToPixelY(yMin - 0.02, h));
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.03, w), clipToPixelY((yMin + yMax) / 2, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/n!,  n = 0\u2026${terms - 1}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(8)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = e \u2248 ${E_LIMIT.toFixed(8)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawInvGeometricAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(40, Math.max(1, Math.round(params.terms ?? 15)));
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = 1.15;
+
+  // Compute partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) partialSum += 1 / Math.pow(2, n);
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v <= 1.0; v += 0.25) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(2), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 10) xStep = 2;
+  if (terms > 20) xStep = 5;
+  for (let k = 1; k <= terms; k += xStep) {
+    const cx = xMin + (k - 0.5) * barW;
+    ctx.fillText(`${k}`, clipToPixelX(cx, w), clipToPixelY(yMin - 0.02, h));
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.03, w), clipToPixelY((yMin + yMax) / 2, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/2\u207F,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(8)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    "Limit = 1",
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawGregoryLeibnizAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(200, Math.max(1, Math.round(params.terms ?? 40)));
+  const LIMIT = Math.PI / 4;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMid = 0;
+  const yExt = 1 - Math.max(mTop, mBottom);
+
+  // Pre-scan for scaling
+  let maxAbsVal = 0, maxAbsSum = 0;
+  {
+    let s = 0;
+    for (let n = 0; n < terms; n++) {
+      const sign = n % 2 === 0 ? 1 : -1;
+      const term = sign / (2 * n + 1);
+      maxAbsVal = Math.max(maxAbsVal, Math.abs(term));
+      s += term;
+      maxAbsSum = Math.max(maxAbsSum, Math.abs(s));
+    }
+  }
+  const scale = Math.max(maxAbsVal, maxAbsSum, 0.001);
+
+  // Compute final partial sum
+  let partialSum = 0;
+  for (let n = 0; n < terms; n++) {
+    const sign = n % 2 === 0 ? 1 : -1;
+    partialSum += sign / (2 * n + 1);
+  }
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+  ctx.textBaseline = "middle";
+
+  // Y-axis tick labels (symmetric around 0)
+  let tickStep = scale / 4;
+  if (tickStep < 0.01) tickStep = 0.01;
+  const mag = Math.pow(10, Math.floor(Math.log10(tickStep)));
+  tickStep = Math.ceil(tickStep / mag) * mag;
+
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText("0", clipToPixelX(xMin - 0.025, w), clipToPixelY(yMid, h));
+
+  for (let v = tickStep; v < scale; v += tickStep) {
+    const cyP = yMid + (v / scale) * yExt;
+    ctx.fillText(formatTick(v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyP, h));
+    const cyN = yMid - (v / scale) * yExt;
+    ctx.fillText(formatTick(-v), clipToPixelX(xMin - 0.025, w), clipToPixelY(cyN, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 10) xStep = 5;
+  if (terms > 50) xStep = 10;
+  if (terms > 100) xStep = 25;
+  for (let k = 0; k < terms; k += xStep) {
+    const cx = xMin + (k + 0.5) * barW;
+    ctx.fillText(`${k}`, clipToPixelX(cx, w), clipToPixelY(-1 + mBottom - 0.02, h));
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.025, w), clipToPixelY(0, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(-1 + mBottom - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 (\u22121)\u207F/(2n+1),  n = 0\u2026${terms - 1}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(1 - mTop + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = \u03C0/4 \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(1 - mTop + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
+function drawAperyAnnotations(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  params: Record<string, number>,
+) {
+  const terms = Math.min(200, Math.max(1, Math.round(params.terms ?? 30)));
+  const LIMIT = 1.20205690;
+
+  const mLeft = 0.14, mRight = 0.06, mBottom = 0.12, mTop = 0.08;
+  const xMin = -1 + mLeft, xMax = 1 - mRight;
+  const yMin = -1 + mBottom, yMax = 1 - mTop;
+  const yScale = LIMIT * 1.15;
+
+  // Compute partial sum
+  let partialSum = 0;
+  for (let n = 1; n <= terms; n++) partialSum += 1 / (n * n * n);
+
+  const baseFontSize = Math.max(10, Math.min(14, w * 0.012));
+
+  // Y-axis tick labels
+  ctx.font = `${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let v = 0; v < yScale; v += 0.25) {
+    const clipY = yMin + (v / yScale) * (yMax - yMin);
+    ctx.fillText(v.toFixed(2), clipToPixelX(xMin - 0.025, w), clipToPixelY(clipY, h));
+  }
+
+  // X-axis: term indices
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  const barW = (xMax - xMin) / terms;
+  let xStep = 1;
+  if (terms > 10) xStep = 5;
+  if (terms > 50) xStep = 10;
+  if (terms > 100) xStep = 25;
+  for (let k = 1; k <= terms; k += xStep) {
+    const cx = xMin + (k - 0.5) * barW;
+    ctx.fillText(`${k}`, clipToPixelX(cx, w), clipToPixelY(yMin - 0.02, h));
+  }
+
+  // Y-axis label
+  ctx.save();
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(clipToPixelX(-1 + 0.03, w), clipToPixelY((yMin + yMax) / 2, h));
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Value", 0, 0);
+  ctx.restore();
+
+  // X-axis label
+  ctx.font = `bold ${baseFontSize}px system-ui, sans-serif`;
+  ctx.fillStyle = LABEL_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Term (n)", clipToPixelX((xMin + xMax) / 2, w), clipToPixelY(yMin - 0.07, h));
+
+  // Title / formula
+  ctx.font = `${baseFontSize * 1.1}px system-ui, sans-serif`;
+  ctx.fillStyle = FORMULA_COLOR;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(
+    `\u2211 1/n\u00B3,  n = 1\u2026${terms}`,
+    clipToPixelX((xMin + xMax) / 2, w),
+    clipToPixelY(yMax + 0.05, h),
+  );
+
+  // Partial sum — top right
+  ctx.font = `bold ${baseFontSize * 1.05}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = SUM_COLOR;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `S${subscriptDigits(terms)} = ${partialSum.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h),
+  );
+
+  // Convergence limit
+  ctx.font = `bold ${baseFontSize}px "SF Mono", "Cascadia Code", "Fira Code", monospace`;
+  ctx.fillStyle = LIMIT_COLOR;
+  ctx.textAlign = "right";
+  ctx.fillText(
+    `Limit = \u03B6(3) \u2248 ${LIMIT.toFixed(6)}`,
+    clipToPixelX(xMax - 0.01, w),
+    clipToPixelY(yMax + 0.04, h) + baseFontSize * 1.5,
+  );
+}
+
 // ─── Annotation dispatch ────────────────────────────────────────────────────
 
 const ANNOTATION_RENDERERS: Record<
@@ -639,6 +1360,12 @@ const ANNOTATION_RENDERERS: Record<
   harmonic: drawHarmonicAnnotations,
   geometric: drawGeometricAnnotations,
   logistic: drawLogisticAnnotations,
+  basel: drawBaselAnnotations,
+  alt_harmonic: drawAltHarmonicAnnotations,
+  e_series: drawESeriesAnnotations,
+  inv_geometric: drawInvGeometricAnnotations,
+  gregory_leibniz: drawGregoryLeibnizAnnotations,
+  apery: drawAperyAnnotations,
 };
 
 // ─── App ────────────────────────────────────────────────────────────────────

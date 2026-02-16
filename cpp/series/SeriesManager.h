@@ -5,9 +5,15 @@
 #pragma once
 
 #include "ISeriesVisualizer.h"
+#include "AlternatingHarmonicVisualizer.h"
+#include "AperyConstantVisualizer.h"
+#include "BaselProblemVisualizer.h"
 #include "CantorSetVisualizer.h"
+#include "ESeriesVisualizer.h"
 #include "GeometricProgressionVisualizer.h"
+#include "GregoryLeibnizVisualizer.h"
 #include "HarmonicProgressionVisualizer.h"
+#include "InverseGeometricVisualizer.h"
 #include "LogisticMapVisualizer.h"
 
 #include <emscripten.h>
@@ -20,10 +26,16 @@
 class SeriesManager {
 public:
     SeriesManager() {
-        visualizers_["cantor"]    = std::make_unique<CantorSetVisualizer>();
-        visualizers_["harmonic"]  = std::make_unique<HarmonicProgressionVisualizer>();
-        visualizers_["geometric"] = std::make_unique<GeometricProgressionVisualizer>();
-        visualizers_["logistic"]  = std::make_unique<LogisticMapVisualizer>();
+        visualizers_["cantor"]       = std::make_unique<CantorSetVisualizer>();
+        visualizers_["harmonic"]     = std::make_unique<HarmonicProgressionVisualizer>();
+        visualizers_["geometric"]    = std::make_unique<GeometricProgressionVisualizer>();
+        visualizers_["logistic"]     = std::make_unique<LogisticMapVisualizer>();
+        visualizers_["basel"]        = std::make_unique<BaselProblemVisualizer>();
+        visualizers_["alt_harmonic"] = std::make_unique<AlternatingHarmonicVisualizer>();
+        visualizers_["e_series"]     = std::make_unique<ESeriesVisualizer>();
+        visualizers_["inv_geometric"]= std::make_unique<InverseGeometricVisualizer>();
+        visualizers_["gregory_leibniz"] = std::make_unique<GregoryLeibnizVisualizer>();
+        visualizers_["apery"]        = std::make_unique<AperyConstantVisualizer>();
         active_ = "cantor";
     }
 
