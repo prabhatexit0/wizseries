@@ -1425,7 +1425,10 @@ export default function App() {
 
   /** Push current view state to the C++ GL renderer. */
   const syncView = useCallback(() => {
-    managerRef.current?.setView(viewScaleRef.current, viewOffsetRef.current);
+    const mgr = managerRef.current;
+    if (mgr && typeof mgr.setView === "function") {
+      mgr.setView(viewScaleRef.current, viewOffsetRef.current);
+    }
   }, []);
 
   /** Reset zoom to 1× and pan to center. */
@@ -1450,7 +1453,7 @@ export default function App() {
       // Reset view on switch
       viewScaleRef.current = 1;
       viewOffsetRef.current = 0;
-      mgr.setView(1, 0);
+      if (typeof mgr.setView === "function") mgr.setView(1, 0);
     },
     [],
   );
